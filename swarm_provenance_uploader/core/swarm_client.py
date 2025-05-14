@@ -104,3 +104,40 @@ def upload_data(gateway_url: str, data_to_upload: bytes, stamp_id: str, verbose:
         response_text_debug = response.text if 'response' in locals() else 'N/A'
         if verbose: print(f"ERROR_DETAIL: Could not parse upload response. URL: {url}, Status: {response.status_code if 'response' in locals() else 'N/A'}, Response Text: {response_text_debug[:500]}..., Error: {e}")
         raise ValueError(f"Could not parse upload response from URL {url}: {e}") from e
+        
+        
+def download_data_from_swarm(gateway_url: str, swarm_hash: str, verbose: bool = False) -> bytes:
+    """
+    Downloads data from Swarm via Bee Gateway using a Swarm reference hash.
+    Returns the raw bytes of the content.
+    """
+    # Swarm hashes are typically lowercase, ensure it for the URL
+    api_path = f"/bzz/{swarm_hash.lower()}" # Assuming data was uploaded via /bzz
+    # If data could have been uploaded via /bytes, you might need a way to distinguish
+    # or try /bzz first and then /bytes if it fails, though /bzz should retrieve single chunks too.
+    url = urljoin(gateway_url, api_path)
+
+    if verbose:
+        print(f"\n--- DEBUG: Attempting Data Download ---")
+        print(f"URL: GET {url}")
+        print(f"-------------------------------------\n")
+
+    try:
+        response = requests.get(url, timeout=60) # Reasonably long timeout for download
+        if verbose:
+            print(f"DEBUG: Data Download Response Status: {response.status_code}")
+            # Consider printing response headers if verbose and debugging
+        
+        if response.status_code == 404:
+            raise FileNotFoundError(f"Data not found on Swarm at hash {swarm_hash} (404 from {url})")
+        
+        response.raise_for_status() # Raise HTTPError for other 4xx/5xx
+        
+        # The content is directly in response.content
+        downloaded_bytes = response.content
+        if verbose:
+            print(f"DEBUG: Successfully downloaded {len(downloaded_bytes)} bytes.")
+        return downloaded_bytes
+    except requests.exceptions.RequestException as e:
+        if verbose: print(f"ERROR_DETAIL: Data download request failed. URL: {url}, Error: {e}")
+        raise ConnectionError(f"Swarm download failed for {swarm_hash} from URL {url}: {e}") from e
