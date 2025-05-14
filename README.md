@@ -1,7 +1,33 @@
-# swarm_provenance_uploader
-A CLI toolkit for wrapping data and uploading to Swarm.
+# Swarm Provenance Uploader
+
+A CLI toolkit to wrap data files within a metadata structure
+and upload them to the Swarm network via a Bee gateway.
+
+## Setup
+
+1. Create and activate a virtual environment.
+   ```bash
+    python -m venv .venv
+    source .venv/bin/activate
+   ```
+2. Copy `.env.example` to `.env` and adjust values if needed.
+   ```bash
+    cp .env.example .env
+   ```
+3. Install in editable mode, including testing dependencies:
+    ```bash
+    pip install -e .[testing]
+    ```
+
+## Usage
+
+```bash
+swarm-prov-upload --file /path/to/your/file.txt
+```
+Use `swarm-prov-upload --help` for all options.
 
 ## Project directory structure
+
 ```
 swarm_provenance_uploader/
 ├── .env.example
