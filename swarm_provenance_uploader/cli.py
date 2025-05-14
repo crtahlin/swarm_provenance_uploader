@@ -3,6 +3,7 @@ from typing import Optional
 from typing_extensions import Annotated
 from pathlib import Path
 import sys
+import time
 
 # Import config and core functions
 from . import config
@@ -76,6 +77,8 @@ def upload(
         # CORRECTED ORDER OF ARGUMENTS PASSED TO purchase_postage_stamp
         stamp_id = swarm_client.purchase_postage_stamp(gateway_url, stamp_amount, stamp_depth)
         typer.echo(f"    Stamp ID: {stamp_id}")
+        typer.echo(f"    Waiting a few seconds for stamp to propagate...")
+        time.sleep(10) # Wait for 10 seconds
     except Exception as e:
         typer.secho(f"ERROR: Failed purchasing stamp: {e}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1)
