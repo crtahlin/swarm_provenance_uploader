@@ -70,8 +70,11 @@ def upload(
 
     # 5 & 6. Request postage stamp
     typer.echo(f"--> Purchasing postage stamp from {gateway_url}...")
+    # Print the actual values being used for amount and depth
+    typer.echo(f"    Using Amount: {stamp_amount}, Depth: {stamp_depth}")
     try:
-        stamp_id = swarm_client.purchase_postage_stamp(gateway_url, stamp_depth, stamp_amount)
+        # CORRECTED ORDER OF ARGUMENTS PASSED TO purchase_postage_stamp
+        stamp_id = swarm_client.purchase_postage_stamp(gateway_url, stamp_amount, stamp_depth)
         typer.echo(f"    Stamp ID: {stamp_id}")
     except Exception as e:
         typer.secho(f"ERROR: Failed purchasing stamp: {e}", fg=typer.colors.RED, err=True)
