@@ -1,48 +1,184 @@
 # Swarm Provenance Uploader
 
 A CLI toolkit to wrap data files within a metadata structure
-and upload them to the Swarm network via a Bee gateway.
+and upload them to the Swarm decentralized storage network.
+
+**Supports two backends:**
+- **Gateway** (default): Uses `provenance-gateway.datafund.io` - no local Bee node required
+- **Local**: Direct Bee node communication for development/self-hosted setups
+
+## Quick Start
+
+```bash
+# Install
+pip install -e .
+
+# Check version
+swarm-prov-upload --version
+
+# Check connectivity
+swarm-prov-upload health
+
+# Upload data (purchases stamp with 25 hour validity)
+swarm-prov-upload upload --file /path/to/data.txt
+
+# Upload with custom duration (hours)
+swarm-prov-upload upload --file /path/to/data.txt --duration 48
+
+# Upload with size preset (small, medium, large)
+swarm-prov-upload upload --file /path/to/data.txt --size medium
+
+# Upload with existing stamp (skip purchase)
+swarm-prov-upload upload --file /path/to/data.txt --stamp-id <existing_stamp_id>
+
+# Download and verify
+swarm-prov-upload download <swarm_hash> --output-dir ./downloads
+```
 
 ## Setup
 
 1. Create and activate a virtual environment.
    ```bash
-    python -m venv .venv
-    source .venv/bin/activate
-    # Or on Windows: .\venv\Scripts\activate
+   python -m venv .venv
+   source .venv/bin/activate
+   # Or on Windows: .\venv\Scripts\activate
    ```
 2. Copy `.env.example` to `.env` and adjust values if needed.
    ```bash
-    cp .env.example .env
+   cp .env.example .env
    ```
 3. Install in editable mode, including testing dependencies:
-    ```bash
-    pip install -e .[testing]
-    ```
+   ```bash
+   pip install -e .[testing]
+   ```
 
-## Configure
+## Backend Configuration
 
-Copy .env.example to .env.
-Ensure you have a Bee node running and that BEE_GATEWAY_URL in .env points to it.
+### Gateway Backend (Default)
+No local Bee node required. Uses the Datafund provenance gateway.
+
+```bash
+# Uses gateway by default
+swarm-prov-upload upload --file data.txt
+
+# Or explicitly
+swarm-prov-upload --backend gateway upload --file data.txt
+
+# Custom gateway URL
+swarm-prov-upload --gateway-url https://custom.gateway.io upload --file data.txt
+```
+
+### Local Backend
+For development or self-hosted Swarm nodes.
+
+```bash
+# Use local Bee node
+swarm-prov-upload --backend local upload --file data.txt
+
+# Custom Bee URL
+swarm-prov-upload --backend local upload --file data.txt --bee-url http://localhost:1633
+```
+
+### Environment Variables
+
+```bash
+PROVENANCE_BACKEND=gateway           # gateway (default) or local
+PROVENANCE_GATEWAY_URL=https://provenance-gateway.datafund.io
+BEE_GATEWAY_URL=http://localhost:1633
+DEFAULT_POSTAGE_DEPTH=17
+DEFAULT_POSTAGE_DURATION_HOURS=25    # Stamp validity in hours (gateway only, min 24)
+DEFAULT_POSTAGE_AMOUNT=1000000000    # Legacy: for local backend
+```
 
 ## Run Tests
 
-(Requires a local Bee node, OR relies on Mocks):
-The sample test above mocks the network calls, so it will run without a live Bee node.
+### Unit Tests (Mocked)
 
-```
+Unit tests use mocks and do not require a live Bee node or gateway.
+
+```bash
+# Run all tests (unit + integration)
 pytest
-``` 
+
+# Run only unit tests (skip integration)
+pytest --ignore=tests/test_integration.py
+```
+
+### Integration Tests (Real Backends)
+
+Integration tests hit real services. They auto-skip if backends are unavailable.
+
+```bash
+# Run only integration tests
+pytest tests/test_integration.py -v
+
+# Run only local Bee tests
+pytest -m local_bee
+
+# Run only gateway tests
+pytest -m gateway
+```
+
+**Requirements:**
+- Local Bee: Running at `http://localhost:1633`
+- Gateway: Available at `https://provenance-gateway.datafund.io`
 
 ## Usage
 
-```bash
-# Upload data to Swarm
-swarm-prov-upload upload --file /path/to/your/prov_file.txt --std "PROV-STD-V1" --verbose
+### Data Operations
 
-# Download and verify data from Swarm
+```bash
+# Upload data to Swarm (default: 25 hour stamp validity)
+swarm-prov-upload upload --file /path/to/data.txt --std "PROV-STD-V1" --verbose
+
+# Upload with custom duration (hours, min 24)
+swarm-prov-upload upload --file /path/to/data.txt --duration 168  # 7 days
+
+# Upload with size preset (small, medium, large)
+swarm-prov-upload upload --file /path/to/data.txt --size large
+
+# Upload with existing stamp (cost savings, faster)
+swarm-prov-upload upload --file /path/to/data.txt --stamp-id <existing_stamp_id>
+
+# Download and verify data
 swarm-prov-upload download <swarm_hash> --output-dir ./downloads --verbose
 ```
+
+**Upload Options:**
+| Option | Description |
+|--------|-------------|
+| `--duration`, `-d` | Stamp validity in hours (min 24, gateway only) |
+| `--size` | Size preset: `small`, `medium`, `large` (gateway only) |
+| `--depth` | Technical depth parameter (16-32) |
+| `--stamp-id`, `-s` | Use existing stamp (skip purchase) |
+| `--amount` | Legacy: PLUR amount (local backend) |
+
+### Stamp Management (Gateway only)
+
+```bash
+# List all stamps
+swarm-prov-upload stamps list
+
+# Get stamp details
+swarm-prov-upload stamps info <stamp_id>
+
+# Extend stamp TTL
+swarm-prov-upload stamps extend <stamp_id> --amount 1000000
+```
+
+### Information Commands
+
+```bash
+# Check backend health
+swarm-prov-upload health
+
+# Wallet info (gateway only)
+swarm-prov-upload wallet
+
+# Chequebook info (gateway only)
+swarm-prov-upload chequebook
+```
+
 Use `swarm-prov-upload --help` for all options.
 
 ## Architecture & Features
@@ -56,13 +192,17 @@ Use `swarm-prov-upload --help` for all options.
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                                CLI INTERFACE                                    │
 │  ┌─────────────────┐  ┌──────────────────┐  ┌─────────────────────────────────┐ │
-│  │ swarm-prov-     │  │ UPLOAD COMMAND   │  │ DOWNLOAD COMMAND                │ │
-│  │ upload --help   │  │ --file (req)     │  │ <swarm_hash> (req)             │ │
-│  │                 │  │ --std            │  │ --output-dir                   │ │
-│  │ Built with:     │  │ --enc            │  │ --verbose                      │ │
-│  │ • Typer CLI     │  │ --gateway-url    │  │ --gateway-url                  │ │
-│  │ • Rich output   │  │ --stamp-*        │  │                                │ │
-│  │ • Auto help     │  │ --verbose        │  │                                │ │
+│  │ GLOBAL OPTIONS  │  │ DATA COMMANDS    │  │ INFO COMMANDS                   │ │
+│  │                 │  │                  │  │                                 │ │
+│  │ --backend       │  │ upload           │  │ health                          │ │
+│  │   gateway|local │  │ download         │  │ wallet (gateway)                │ │
+│  │ --gateway-url   │  │                  │  │ chequebook (gateway)            │ │
+│  │                 │  ├──────────────────┤  │                                 │ │
+│  │ Built with:     │  │ STAMPS COMMANDS  │  │                                 │ │
+│  │ • Typer CLI     │  │ (gateway only)   │  │                                 │ │
+│  │ • Rich output   │  │ stamps list      │  │                                 │ │
+│  │ • Auto help     │  │ stamps info      │  │                                 │ │
+│  │                 │  │ stamps extend    │  │                                 │ │
 │  └─────────────────┘  └──────────────────┘  └─────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                         │
@@ -70,15 +210,16 @@ Use `swarm-prov-upload --help` for all options.
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                              CORE BUSINESS LOGIC                               │
 │  ┌───────────────────┐  ┌─────────────────┐  ┌──────────────────────────────┐  │
-│  │ FILE_UTILS.PY     │  │ METADATA_       │  │ SWARM_CLIENT.PY              │  │
+│  │ FILE_UTILS.PY     │  │ METADATA_       │  │ BACKEND CLIENTS              │  │
 │  │                   │  │ BUILDER.PY      │  │                              │  │
-│  │ • File I/O        │  │                 │  │ • HTTP client wrapper       │  │
-│  │ • SHA256 hashing  │  │ • Pydantic      │  │ • Stamp purchasing           │  │
-│  │ • Base64 encode   │  │   validation    │  │ • Stamp status checking      │  │
-│  │ • Base64 decode   │  │ • JSON          │  │ • Data upload/download       │  │
-│  │ • Size calculation│  │   serialization │  │ • Error handling             │  │
-│  │ • Error handling  │  │ • Metadata      │  │ • Retry logic                │  │
-│  │                   │  │   wrapping      │  │ • Debug logging              │  │
+│  │ • File I/O        │  │                 │  │ gateway_client.py (default)  │  │
+│  │ • SHA256 hashing  │  │ • Pydantic      │  │ • Gateway API wrapper        │  │
+│  │ • Base64 encode   │  │   validation    │  │ • Full feature support       │  │
+│  │ • Base64 decode   │  │ • JSON          │  │ • No local node needed       │  │
+│  │ • Size calculation│  │   serialization │  │                              │  │
+│  │ • Error handling  │  │ • Metadata      │  │ swarm_client.py (local)      │  │
+│  │                   │  │   wrapping      │  │ • Direct Bee API             │  │
+│  │                   │  │                 │  │ • Local/self-hosted          │  │
 │  └───────────────────┘  └─────────────────┘  └──────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                         │
@@ -89,12 +230,12 @@ Use `swarm-prov-upload --help` for all options.
 │  │ MODELS.PY                       │  │ CONFIG.PY                           │  │
 │  │                                 │  │                                     │  │
 │  │ ProvenanceMetadata (Pydantic):  │  │ Environment Configuration:          │  │
-│  │ ┌─────────────────────────────┐ │  │ • BEE_GATEWAY_URL                  │  │
-│  │ │ • data: str (Base64)        │ │  │ • DEFAULT_POSTAGE_DEPTH            │  │
-│  │ │ • content_hash: str (SHA256)│ │  │ • DEFAULT_POSTAGE_AMOUNT           │  │
-│  │ │ • stamp_id: str (64 hex)    │ │  │ • .env file support                │  │
-│  │ │ • provenance_standard: str? │ │  │ • Type validation                  │  │
-│  │ │ • encryption: str?          │ │  │ • Default fallbacks                │  │
+│  │ ┌─────────────────────────────┐ │  │ • PROVENANCE_BACKEND               │  │
+│  │ │ • data: str (Base64)        │ │  │ • PROVENANCE_GATEWAY_URL           │  │
+│  │ │ • content_hash: str (SHA256)│ │  │ • BEE_GATEWAY_URL                  │  │
+│  │ │ • stamp_id: str (64 hex)    │ │  │ • DEFAULT_POSTAGE_DEPTH            │  │
+│  │ │ • provenance_standard: str? │ │  │ • DEFAULT_POSTAGE_AMOUNT           │  │
+│  │ │ • encryption: str?          │ │  │ • .env file support                │  │
 │  │ └─────────────────────────────┘ │  │                                     │  │
 │  │                                 │  │                                     │  │
 │  │ • JSON schema validation        │  │                                     │  │
@@ -149,20 +290,20 @@ Use `swarm-prov-upload --help` for all options.
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                              SWARM NETWORK LAYER                               │
 │  ┌─────────────────────────────────┐  ┌─────────────────────────────────────┐  │
-│  │ BEE NODE (LOCAL/REMOTE)         │  │ SWARM NETWORK                       │  │
+│  │ GATEWAY (DEFAULT)               │  │ SWARM NETWORK                       │  │
 │  │                                 │  │                                     │  │
-│  │ API Endpoints:                  │  │ • Decentralized storage             │  │
-│  │ • /health - Node status         │  │ • Content-addressable               │  │
-│  │ • /stamps/{amount}/{depth}      │  │ • Redundant & persistent            │  │
-│  │ • /stamps/{id} - Check status   │  │ • Cryptographic integrity           │  │
-│  │ • /bzz - Upload/download        │  │ • Economic incentives               │  │
-│  │ • /wallet - Balance info        │  │ • Censorship resistant              │  │
-│  │ • /chequebook - Bandwidth       │  │                                     │  │
+│  │ provenance-gateway.datafund.io  │  │ • Decentralized storage             │  │
+│  │ API Endpoints:                  │  │ • Content-addressable               │  │
+│  │ • /api/v1/stamps/ - CRUD        │  │ • Redundant & persistent            │  │
+│  │ • /api/v1/data/ - Upload/DL     │  │ • Cryptographic integrity           │  │
+│  │ • /api/v1/wallet - Balance      │  │ • Economic incentives               │  │
+│  │ • /api/v1/chequebook            │  │ • Censorship resistant              │  │
 │  │                                 │  │                                     │  │
-│  │ Requirements:                   │  │                                     │  │
-│  │ • Running Bee node              │  │                                     │  │
-│  │ • Funded wallet (BZZ tokens)    │  │                                     │  │
-│  │ • Network connectivity          │  │                                     │  │
+│  │ No local node required!         │  │                                     │  │
+│  ├─────────────────────────────────┤  │                                     │  │
+│  │ LOCAL BEE (--backend local)     │  │                                     │  │
+│  │ Direct /bzz, /stamps endpoints  │  │                                     │  │
+│  │ Requires running Bee node       │  │                                     │  │
 │  └─────────────────────────────────┘  └─────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
@@ -192,6 +333,12 @@ Use `swarm-prov-upload --help` for all options.
 │  • TTL-based data persistence     • HTTP request/response logging             │
 │  • Automatic stamp validation     • Progress indicators                       │
 │  • Configurable parameters        • Error context & suggestions               │
+│                                                                                 │
+│  🔀 DUAL BACKEND SUPPORT           🚀 GATEWAY FEATURES (NEW)                   │
+│  • Gateway backend (default)      • stamps list - View all stamps             │
+│  • Local Bee backend option       • stamps extend - Add TTL                   │
+│  • Seamless switching             • wallet - View BZZ balance                 │
+│  • Same CLI for both              • chequebook - View chequebook              │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -219,6 +366,7 @@ This architecture diagram shows the **Swarm Provenance Uploader** as a layered s
 4. **Network Layer**: Interfaces with Bee nodes and the Swarm decentralized network
 
 **Key Strengths**:
+- ✅ **Dual backend support** (gateway default, local Bee optional)
 - ✅ **Bidirectional operations** (upload/download)
 - ✅ **Integrity verification** (SHA256 hashing)
 - ✅ **Metadata preservation** (provenance standards)
@@ -233,18 +381,23 @@ swarm_provenance_uploader/
 ├── .gitignore
 ├── pyproject.toml
 ├── README.md
+├── CLAUDE.md
 ├── swarm_provenance_uploader/
 │   ├── __init__.py
 │   ├── cli.py
 │   ├── config.py
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── file_utils.py
-│   │   ├── metadata_builder.py
-│   │   └── swarm_client.py
-│   └── models.py
+│   ├── exceptions.py            # Custom exception classes
+│   ├── models.py
+│   └── core/
+│       ├── __init__.py
+│       ├── file_utils.py
+│       ├── gateway_client.py    # Gateway API client (default)
+│       ├── metadata_builder.py
+│       └── swarm_client.py      # Local Bee API client
 └── tests/
     ├── __init__.py
-    └── test_cli.py
+    ├── test_cli.py              # CLI unit tests (mocked)
+    ├── test_gateway_client.py   # GatewayClient unit tests (mocked)
+    └── test_integration.py      # Integration tests (real backends)
 ```
 
